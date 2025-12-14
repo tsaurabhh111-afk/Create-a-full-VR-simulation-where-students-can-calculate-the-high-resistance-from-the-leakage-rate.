@@ -1,0 +1,194 @@
+import React, { useState } from 'react';
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, Environment, ContactShadows, PerspectiveCamera, Grid, Text, DeviceOrientationControls } from '@react-three/drei';
+import { Smartphone, MousePointer2 } from 'lucide-react';
+import { ExperimentState } from '../types';
+import { Voltmeter3D, Capacitor3D, Resistor3D, KnifeSwitch3D, Wire3D } from './Lab3DModels';
+
+interface Props {
+  state: ExperimentState;
+  voltage: number;
+  capacitance: number;
+  resistance: number;
+  onToggleCharge: () => void;
+  onToggleDischarge: () => void;
+}
+
+interface SceneContentProps extends Props {
+  gyroEnabled: boolean;
+}
+
+const SceneContent: React.FC<SceneContentProps> = ({ 
+  state, 
+  voltage, 
+  capacitance, 
+  resistance, 
+  onToggleCharge, 
+  onToggleDischarge,
+  gyroEnabled 
+}) => {
+  const isCharging = state === ExperimentState.CHARGING;
+  const isDischarging = state === ExperimentState.DISCHARGING;
+
+  return (
+    <>
+      <Environment preset="city" />
+      <ambientLight intensity={0.5} />
+      <pointLight position={[10, 10, 10]} intensity={1} castShadow />
+
+      <group position={[0, -0.5, 0]}>
+        {/* Lab Table Surface */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+          <planeGeometry args={[10, 6]} />
+          <meshStandardMaterial color="#1e293b" roughness={0.2} metalness={0.5} />
+        </mesh>
+        <Grid position={[0, 0.01, 0]} args={[10, 6]} cellColor="#334155" sectionColor="#475569" infiniteGrid fadeDistance={20} />
+
+        {/* --- Instruments --- */}
+
+        {/* 1. Voltmeter (Center) */}
+        <group position={[0, 0, 0]} rotation={[0, 0, 0]}>
+          <Voltmeter3D voltage={voltage} />
+        </group>
+
+        {/* 2. Capacitor (Left Center) */}
+        <group position={[-1.5, 0, 0]}>
+          <Capacitor3D capacitance={capacitance} />
+        </group>
+
+        {/* 3. Unknown Resistor (Right Center) */}
+        <group position={[1.5, 0.5, 0]}>
+           {/* Box to hide the resistor slightly as it's "Unknown" - or just show it */}
+           <mesh position={[0,-0.45,0]}>
+                <boxGeometry args={[1.2, 0.1, 0.6]} />
+                <meshStandardMaterial color="#475569" />
+           </mesh>
+           <Resistor3D resistance={resistance} />
+        </group>
+
+        {/* 4. Switch S1 (Charge) - Far Left */}
+        <group position={[-3, 0, 0.5]}>
+          <KnifeSwitch3D 
+            label="S1 (Charge)" 
+            isOpen={!isCharging} 
+            onClick={onToggleCharge} 
+          />
+        </group>
+
+        {/* 5. Switch S2 (Discharge) - Far Right */}
+        <group position={[3, 0, 0.5]}>
+          <KnifeSwitch3D 
+            label="S2 (Discharge)" 
+            isOpen={!isDischarging} 
+            onClick={onToggleDischarge} 
+          />
+        </group>
+
+        {/* 6. Battery Source (Far Far Left) */}
+        <group position={[-4.5, 0.5, -0.5]}>
+             <mesh>
+                <boxGeometry args={[1, 1, 0.8]} />
+                <meshStandardMaterial color="#dc2626" />
+             </mesh>
+             <Text position={[0, 0, 0.41]} fontSize={0.2} color="white">DC SOURCE</Text>
+        </group>
+
+
+        {/* --- Wires (Visual Connections) --- */}
+        {/* Source to S1 */}
+        <Wire3D start={[-4, 0, 0]} end={[-3, 0, 0]} />
+        {/* S1 to C */}
+        <Wire3D start={[-3, 0, 0]} end={[-1.5, 0, 0]} />
+        {/* C to Voltmeter */}
+        <Wire3D start={[-1.5, 0, 0]} end={[-0.8, 0, 0]} />
+        {/* Voltmeter to R */}
+        <Wire3D start={[0.8, 0, 0]} end={[1.5, 0, 0]} />
+        {/* R to S2 */}
+        <Wire3D start={[1.5, 0, 0]} end={[3, 0, 0]} />
+
+      </group>
+      
+      <ContactShadows position={[0, -0.5, 0]} opacity={0.4} scale={10} blur={2} far={4} />
+      
+      {gyroEnabled ? (
+         <DeviceOrientationControls />
+      ) : (
+         <OrbitControls makeDefault minPolarAngle={0} maxPolarAngle={Math.PI / 2.1} />
+      )}
+      
+      <PerspectiveCamera makeDefault position={[0, 4, 6]} fov={50} />
+    </>
+  );
+};
+
+const Scene3D: React.FC<Props> = (props) => {
+  const [gyroEnabled, setGyroEnabled] = useState(false);
+
+  const handleToggleGyro = async () => {
+    if (!gyroEnabled) {
+        // Request permission for iOS 13+ devices
+        if (
+            typeof DeviceOrientationEvent !== 'undefined' && 
+            (DeviceOrientationEvent as any).requestPermission
+        ) {
+            try {
+                const permissionState = await (DeviceOrientationEvent as any).requestPermission();
+                if (permissionState === 'granted') {
+                    setGyroEnabled(true);
+                } else {
+                    alert('Permission to access device orientation was denied.');
+                }
+            } catch (error) {
+                console.error(error);
+                // Fallback for non-secure contexts or other errors
+                setGyroEnabled(true);
+            }
+        } else {
+            // Non-iOS 13+ devices
+            setGyroEnabled(true);
+        }
+    } else {
+        setGyroEnabled(false);
+    }
+  };
+
+  return (
+    <div className="w-full h-full bg-slate-900 rounded-lg overflow-hidden border border-slate-700 shadow-2xl relative">
+       {/* Instruction Overlay */}
+       <div className="absolute top-4 left-4 z-10 bg-black/60 backdrop-blur-sm p-3 rounded border border-white/10 text-xs text-white pointer-events-none">
+          <p className="font-bold mb-1">VR LAB NAVIGATION</p>
+          {gyroEnabled ? (
+            <ul className="space-y-1 text-slate-300">
+                <li className="flex items-center gap-2"><Smartphone size={12}/> <span className="text-indigo-400">Sensor Active</span></li>
+                <li>• Tilt device to look around</li>
+                <li>• Tap switches to interact</li>
+            </ul>
+          ) : (
+            <ul className="space-y-1 text-slate-300">
+                <li className="flex items-center gap-2"><MousePointer2 size={12}/> Drag to Rotate / Scroll Zoom</li>
+                <li>• Click <span className="text-red-400 font-bold">Switches</span> to Toggle</li>
+            </ul>
+          )}
+       </div>
+
+       {/* Gyro Toggle Button */}
+       <button 
+         onClick={handleToggleGyro}
+         className={`absolute top-4 right-4 z-20 p-2 rounded-lg flex items-center gap-2 text-sm font-semibold transition-all shadow-lg pointer-events-auto ${
+            gyroEnabled 
+                ? 'bg-indigo-600 hover:bg-indigo-500 text-white ring-2 ring-indigo-300' 
+                : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
+         }`}
+       >
+         {gyroEnabled ? <MousePointer2 className="w-4 h-4" /> : <Smartphone className="w-4 h-4" />}
+         {gyroEnabled ? "Exit VR Mode" : "Enter VR Mode"}
+       </button>
+
+      <Canvas shadows dpr={[1, 2]}>
+        <SceneContent {...props} gyroEnabled={gyroEnabled} />
+      </Canvas>
+    </div>
+  );
+};
+
+export default Scene3D;
